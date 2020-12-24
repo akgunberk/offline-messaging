@@ -1,35 +1,30 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { UserDto } from 'src/dtos';
+import { UserDto } from 'src/modules/users/dto';
 import { User, UserDocument } from '../schemas/user.schema';
-import * as bcrypt from 'bcrypt';
-import { JwtService } from '@nestjs/jwt';
+import { BcryptService } from '../../utils/bcrypt.service';
 
 @Injectable()
 export class UsersService {
   constructor(
-    private readonly jwtService: JwtService,
+    private readonly bcryptServices: BcryptService,
     @InjectModel(User.name) private UserModel: Model<UserDocument>,
   ) {}
 
-  private readonly logger = new Logger(UsersService.name);
-
   async createUser({ password, ...rest }: UserDto) {
     return this.UserModel.create({
-      password: await this.hashPassword(password),
+      password: await this.bcryptServices.hashPassword(password),
       ...rest,
     })
       .then(async (res) => {
         const { password, username } = res.toObject();
-        return await this.generateJwt({ username, password });
+        return await this.bcryptServices.generateJwt({ username, password });
       })
       .catch((err) => {
         if (err.name === 'MongoError' && err.code === 11000) {
           throw new HttpException('User already exist!', HttpStatus.CONFLICT);
         }
-
-        this.logger.error(err);
 
         throw new HttpException('Somethings got wrong', HttpStatus.BAD_REQUEST);
       });
@@ -39,29 +34,17 @@ export class UsersService {
     return this.UserModel.find().lean().exec();
   }
 
-  hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, 12);
-  }
-
-  comparePasswords(password: string, encrypted: string): Promise<boolean> {
-    return bcrypt.compare(password, encrypted);
-  }
-
-  generateJwt(user: { username: string; password: string }): Promise<string> {
-    return this.jwtService.signAsync(user);
-  }
-
   async register(user: UserDto) {
-    const password = await this.hashPassword(user.password);
+    const password = await this.bcryptServices.hashPassword(user.password);
     await this.UserModel.create({ ...user, password });
-    return await this.generateJwt(user);
+    return await this.bcryptServices.generateJwt(user);
   }
 
   async findOneByEmail(email: string) {
     return await this.UserModel.findOne({ email });
   }
 
-  async findById(id: number) {
+  async findById(id: string) {
     return await this.UserModel.findOne({ _id: id });
   }
 
@@ -80,7 +63,7 @@ export class UsersService {
   async findOneAndUpdate(user: UserDto) {
     return await this.UserModel.findOneAndUpdate(
       { email: user.email },
-      { password: await this.hashPassword(user.password) },
+      { password: await this.bcryptServices.hashPassword(user.password) },
       { new: true },
     );
   }

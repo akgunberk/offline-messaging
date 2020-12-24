@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { UserDto } from 'src/dtos';
+import { Body, Controller, Get, Post, Request } from '@nestjs/common';
+import { UserDto } from 'src/modules/users/dto';
 import { Public, UseLocalStrategy } from 'src/utils/custom-decorators';
 import { UsersService } from '../users/users.service';
 
@@ -7,11 +7,16 @@ import { UsersService } from '../users/users.service';
 export class AuthController {
   constructor(private userService: UsersService) {}
 
+  @Public()
+  @Post('register')
+  async registerUser(@Body() user: UserDto) {
+    return await this.userService.register(user);
+  }
+
   @UseLocalStrategy()
   @Post('login')
-  async login(@Body() user: UserDto) {
-    console.log('here');
-    return user;
+  async login(@Request() req) {
+    return req.user;
   }
 
   @Public()
@@ -20,7 +25,6 @@ export class AuthController {
     return await this.userService.createUser(user);
   }
 
-  @Public()
   @Get()
   async getUser(): Promise<UserDto[]> {
     return this.userService.getUsers();
